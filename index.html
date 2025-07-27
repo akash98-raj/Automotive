@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Route Optimizer - Berlin</title>
+    <style>
+        #map { height: 80vh; width: 100%; }
+        .controls { padding: 10px; }
+        input { margin: 5px; padding: 5px; }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry&callback=initMap" async defer></script>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="origin" placeholder="Origin in Berlin (e.g., Brandenburg Gate)">
+        <input type="text" id="destination" placeholder="Destination in Berlin (e.g., Alexanderplatz)">
+        <button onclick="optimizeRoute()">Optimize Route</button>
+        <p id="result"></p>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        let map;
+
+        async function initMap() {
+            const berlin = { lat: 52.5200, lng: 13.4050 };
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: berlin,
+                zoom: 11,
+                restriction: {
+                    latLngBounds: { north: 52.675, south: 52.338, west: 13.089, east: 13.761 },
+                    strictBounds: true
+                }
+            });
+        }
+
+        async function optimizeRoute() {
+            alert('Button clicked!'); // Temporary debug
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+
+            if (!origin || !destination) {
+                document.getElementById('result').textContent = 'Please enter both origin and destination.';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, destination })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('result').textContent = `Error: ${data.error}`;
+                } else {
+                    document.getElementById('result').textContent = 
+                        `Predicted Energy Consumption: ${data.energy_consumption.toFixed(2)} kWh\n` +
+                        `Features: Speed Limit: ${data.features.speed_limit_kmh.toFixed(2)} km/h, ` +
+                        `Elevation: ${data.features.elevation_gradient.toFixed(4)}, ` +
+                        `Temp: ${data.features.weather_temperature_celsius.toFixed(2)}°C, ` +
+                        `Traffic Density: ${data.features.traffic_density.toFixed(2)}`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').textContent = `Failed to optimize route: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
