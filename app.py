@@ -6,8 +6,7 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 import requests
-import json
-from datetime import datetime
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -18,372 +17,357 @@ OPENWEATHER_API_KEY = os.getenv('OPENWEATHER_API_KEY')
 app = Flask(__name__, template_folder='.')
 CORS(app)
 
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # Load and train the model
-csv_data = pd.read_csv('ev_energy_consumption_synthetic_5000.csv')
-X = csv_data[['speed_limit_kmh', 'elevation_gradient', 'weather_temperature_celsius', 'traffic_density']]
-y = csv_data['energy_consumption']
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-model.fit(X, y)
+try:
+    csv_data = pd.read_csv('ev_energy_consumption_synthetic_5000.csv')
+    X = csv_data[['speed_limit_kmh', 'elevation_gradient', 'weather_temperature_celsius', 'traffic_density']]
+    y = csv_data['energy_consumption']
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    logger.info("Model trained successfully")
+except Exception as e:
+    logger.error(f"Error loading/training model: {e}")
+    # Create dummy model for testing
+    model = None
 
 def get_weather_data(lat, lon):
-    """Get real weather data from OpenWeather API"""
+    """Get weather data from OpenWeather API - using free Current Weather API"""
+    if not OPENWEATHER_API_KEY:
+        logger.warning("OpenWeather API key not found, using default temperature")
+        return {"temperature": 20.0, "humidity": 50, "wind_speed": 0}
+    
     try:
+        # Using free Current Weather API (not One Call API which requires subscription)
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
-        return data['main']['temp']
-    except Exception as e:
-        print(f"Weather API error: {e}")
-        return 15.0  # Default temperature
+        
+        main = data.get('main', {})
+        wind = data.get('wind', {})
+        weather = data.get('weather', [{}])[0]
+        
+        return {
+            "temperature": main.get('temp', 20.0),
+            "humidity": main.get('humidity', 50),
+            "wind_speed": wind.get('speed', 0),
+            "weather_description": weather.get('description', 'clear'),
+            "visibility": data.get('visibility', 10000) / 1000  # Convert to km
+        }
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Weather API error: {e}")
+        logger.info("Using default weather values")
+        return {"temperature": 20.0, "humidity": 50, "wind_speed": 0, "weather_description": "clear", "visibility": 10}
 
 def get_elevation_data(lat, lon):
     """Get elevation data from Google Elevation API"""
+    if not GOOGLE_MAPS_API_KEY:
+        logger.warning("Google Maps API key not found, using default elevation")
+        return 0.0
+    
     try:
         url = f"https://maps.googleapis.com/maps/api/elevation/json?locations={lat},{lon}&key={GOOGLE_MAPS_API_KEY}"
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
-        if data['status'] == 'OK' and data['results']:
+        if data['status'] == 'OK':
             return data['results'][0]['elevation']
-    except Exception as e:
-        print(f"Elevation API error: {e}")
-    return 50.0  # Default elevation
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Elevation API error: {e}")
+    
+    return 0.0  # Default elevation
 
-def calculate_elevation_gradient(route_points):
-    """Calculate elevation gradient along the route"""
-    if len(route_points) < 2:
-        return 0.0
+def get_charging_stations(lat, lon, radius=5000):
+    """Get EV charging stations using TomTom API"""
+    charging_stations = []
     
-    elevations = []
-    for point in route_points[::max(1, len(route_points)//10)]:  # Sample 10 points max
-        elevation = get_elevation_data(point['lat'], point['lng'])
-        elevations.append(elevation)
+    if not TOMTOM_API_KEY:
+        logger.warning("TomTom API key not found, returning empty charging stations")
+        return charging_stations
     
-    if len(elevations) < 2:
-        return 0.0
-    
-    # Calculate average gradient
-    total_elevation_change = elevations[-1] - elevations[0]
-    # Approximate distance (this is simplified)
-    return total_elevation_change / 1000  # Gradient per km
-
-def get_traffic_density(route_polyline):
-    """Get traffic data from Google Maps Traffic"""
     try:
-        # Use departure time to get current traffic
-        departure_time = int(datetime.now().timestamp())
-        url = f"https://maps.googleapis.com/maps/api/directions/json"
+        # TomTom Places API for EV charging stations
+        url = f"https://api.tomtom.com/search/2/poiSearch/electric%20vehicle%20charging%20station.json"
         params = {
-            'origin': route_polyline[0] if route_polyline else '52.5200,13.4050',
-            'destination': route_polyline[-1] if route_polyline else '52.5200,13.4050',
-            'departure_time': departure_time,
-            'traffic_model': 'best_guess',
-            'key': GOOGLE_MAPS_API_KEY
+            'key': TOMTOM_API_KEY,
+            'lat': lat,
+            'lon': lon,
+            'radius': radius,
+            'limit': 10
         }
+        
         response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         data = response.json()
         
-        if data['status'] == 'OK':
-            route = data['routes'][0]['legs'][0]
-            duration_in_traffic = route.get('duration_in_traffic', route['duration'])['value']
-            normal_duration = route['duration']['value']
-            
-            # Calculate traffic density ratio
-            traffic_ratio = duration_in_traffic / normal_duration if normal_duration > 0 else 1.0
-            return min(max((traffic_ratio - 1) * 2, 0), 1)  # Normalize to 0-1
+        for result in data.get('results', []):
+            try:
+                station = {
+                    'name': result.get('poi', {}).get('name', 'Unknown Station'),
+                    'lat': result.get('position', {}).get('lat', 0),
+                    'lon': result.get('position', {}).get('lon', 0),
+                    'address': result.get('address', {}).get('freeformAddress', 'Unknown Address'),
+                    'distance': result.get('dist', 0)
+                }
+                charging_stations.append(station)
+            except KeyError as e:
+                logger.warning(f"Missing key in charging station data: {e}")
+                continue
+                
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Charging stations API error: {e}")
     except Exception as e:
-        print(f"Traffic API error: {e}")
+        logger.error(f"Unexpected error fetching charging stations: {e}")
     
-    return 0.3  # Default moderate traffic
+    return charging_stations
 
-def get_charging_stations(bounds):
-    """Get EV charging stations in the area using Google Places API with expanded search"""
+def get_route_data(origin, destination):
+    """Get route data from Google Directions API"""
+    if not GOOGLE_MAPS_API_KEY:
+        logger.error("Google Maps API key not found")
+        return None
+    
     try:
-        # Calculate center and radius from bounds
-        center_lat = (bounds['north'] + bounds['south']) / 2
-        center_lng = (bounds['east'] + bounds['west']) / 2
-        
-        # Calculate radius based on bounds (to cover the entire route area)
-        from math import radians, sin, cos, sqrt, atan2
-        
-        def haversine_distance(lat1, lon1, lat2, lon2):
-            R = 6371000  # Earth's radius in meters
-            dlat = radians(lat2 - lat1)
-            dlon = radians(lon2 - lon1)
-            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-            c = 2 * atan2(sqrt(a), sqrt(1-a))
-            return R * c
-        
-        # Calculate dynamic radius based on route bounds
-        radius = min(max(
-            haversine_distance(bounds['south'], bounds['west'], bounds['north'], bounds['east']) / 2,
-            2000  # Minimum 2km
-        ), 15000)  # Maximum 15km for Berlin area
-        
-        stations = []
-        
-        # Multiple search strategies for better coverage
-        search_terms = [
-            'electric vehicle charging station',
-            'EV charging',
-            'Tesla Supercharger',
-            'charging point',
-            'Ladesäule'  # German for charging station
-        ]
-        
-        for keyword in search_terms[:2]:  # Limit to avoid too many API calls
-            url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-            params = {
-                'location': f"{center_lat},{center_lng}",
-                'radius': int(radius),
-                'keyword': keyword,
-                'key': GOOGLE_MAPS_API_KEY
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            data = response.json()
-            
-            if data['status'] == 'OK':
-                for place in data.get('results', []):
-                    # Avoid duplicates by checking if station already exists
-                    station_exists = any(
-                        abs(station['lat'] - place['geometry']['location']['lat']) < 0.001 and
-                        abs(station['lng'] - place['geometry']['location']['lng']) < 0.001
-                        for station in stations
-                    )
-                    
-                    if not station_exists:
-                        stations.append({
-                            'name': place['name'],
-                            'lat': place['geometry']['location']['lat'],
-                            'lng': place['geometry']['location']['lng'],
-                            'rating': place.get('rating', 0),
-                            'vicinity': place.get('vicinity', ''),
-                            'types': place.get('types', []),
-                            'place_id': place.get('place_id', '')
-                        })
-        
-        # Sort by rating and limit results
-        stations.sort(key=lambda x: x['rating'], reverse=True)
-        return stations[:15]  # Return top 15 stations
-        
-    except Exception as e:
-        print(f"Charging stations API error: {e}")
-        return []
-
-def decode_polyline(polyline_str):
-    """Decode Google Maps polyline to coordinates"""
-    index = 0
-    lat = 0
-    lng = 0
-    coordinates = []
-    
-    while index < len(polyline_str):
-        # Decode latitude
-        result = 1
-        shift = 0
-        while True:
-            b = ord(polyline_str[index]) - 63 - 1
-            index += 1
-            result += b << shift
-            shift += 5
-            if b < 0x1f:
-                break
-        dlat = (~result >> 1) if (result & 1) != 0 else (result >> 1)
-        lat += dlat
-        
-        # Decode longitude
-        result = 1
-        shift = 0
-        while True:
-            b = ord(polyline_str[index]) - 63 - 1
-            index += 1
-            result += b << shift
-            shift += 5
-            if b < 0x1f:
-                break
-        dlng = (~result >> 1) if (result & 1) != 0 else (result >> 1)
-        lng += dlng
-        
-        coordinates.append({'lat': lat / 1e5, 'lng': lng / 1e5})
-    
-    return coordinates
-
-def get_route_with_alternatives(origin, destination):
-    """Get multiple route options from Google Directions API with Berlin-wide support"""
-    try:
-        # Add "Berlin, Germany" to locations if not already specified
-        def ensure_berlin_context(location):
-            if 'berlin' not in location.lower() and 'germany' not in location.lower():
-                return f"{location}, Berlin, Germany"
-            return location
-        
-        origin_full = ensure_berlin_context(origin)
-        destination_full = ensure_berlin_context(destination)
-        
-        url = "https://maps.googleapis.com/maps/api/directions/json"
+        url = f"https://maps.googleapis.com/maps/api/directions/json"
         params = {
-            'origin': origin_full,
-            'destination': destination_full,
-            'alternatives': True,
-            'departure_time': int(datetime.now().timestamp()),
-            'traffic_model': 'best_guess',
-            'region': 'de',  # Germany region bias
-            'language': 'en',
+            'origin': origin,
+            'destination': destination,
+            'key': GOOGLE_MAPS_API_KEY,
+            'alternatives': 'true',
+            'departure_time': 'now'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data['status'] != 'OK':
+            logger.error(f"Google Directions API error: {data['status']}")
+            return None
+            
+        return data
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Route API error: {e}")
+        return None
+
+def calculate_route_features(route_data, origin_coords, dest_coords):
+    """Calculate route features for energy consumption prediction"""
+    route = route_data['routes'][0]['legs'][0]
+    
+    # Get weather data for route midpoint
+    start_lat, start_lon = origin_coords
+    end_lat, end_lon = dest_coords
+    mid_lat = (start_lat + end_lat) / 2
+    mid_lon = (start_lon + end_lon) / 2
+    
+    weather_data = get_weather_data(mid_lat, mid_lon)
+    weather_temp = weather_data["temperature"]
+    
+    # Calculate elevation gradient (simplified)
+    start_elevation = get_elevation_data(start_lat, start_lon)
+    end_elevation = get_elevation_data(end_lat, end_lon)
+    distance_km = route['distance']['value'] / 1000
+    elevation_gradient = (end_elevation - start_elevation) / (distance_km * 1000) if distance_km > 0 else 0
+    
+    # Estimate features based on route data
+    duration_hours = route['duration']['value'] / 3600
+    avg_speed = distance_km / duration_hours if duration_hours > 0 else 50
+    
+    # Traffic density estimation (simplified)
+    duration_in_traffic = route.get('duration_in_traffic', {}).get('value', route['duration']['value'])
+    traffic_factor = duration_in_traffic / route['duration']['value'] if route['duration']['value'] > 0 else 1
+    traffic_density = min((traffic_factor - 1) * 2, 1.0)  # Normalize to 0-1
+    
+    # Weather impact factors
+    wind_factor = min(weather_data.get("wind_speed", 0) / 10, 1.0)  # Normalize wind speed
+    visibility_factor = min(weather_data.get("visibility", 10) / 10, 1.0)  # Normalize visibility
+    
+    return {
+        'speed_limit_kmh': min(avg_speed * 1.2, 130),  # Estimate speed limit
+        'elevation_gradient': elevation_gradient,
+        'weather_temperature_celsius': weather_temp,
+        'traffic_density': traffic_density,
+        'distance_km': distance_km,
+        'duration_minutes': route['duration']['value'] / 60,
+        'weather_conditions': {
+            'humidity': weather_data.get("humidity", 50),
+            'wind_speed': weather_data.get("wind_speed", 0),
+            'description': weather_data.get("weather_description", "clear"),
+            'visibility_km': weather_data.get("visibility", 10)
+        }
+    }
+
+def geocode_address(address):
+    """Convert address to coordinates using Google Geocoding API"""
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    
+    try:
+        url = f"https://maps.googleapis.com/maps/api/geocode/json"
+        params = {
+            'address': address,
             'key': GOOGLE_MAPS_API_KEY
         }
         
-        response = requests.get(url, params=params, timeout=20)  # Increased timeout
+        response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
         
         if data['status'] == 'OK':
-            routes = []
-            for i, route in enumerate(data['routes'][:3]):  # Max 3 routes
-                leg = route['legs'][0]
-                
-                # Decode polyline for detailed analysis
-                polyline_points = decode_polyline(route['overview_polyline']['points'])
-                
-                # Sample points for analysis (to reduce API calls)
-                sample_points = polyline_points[::max(1, len(polyline_points)//5)]  # Sample 5 points
-                
-                # Get real weather data (using route midpoint)
-                mid_point = polyline_points[len(polyline_points)//2] if polyline_points else {'lat': 52.5200, 'lng': 13.4050}
-                weather_temp = get_weather_data(mid_point['lat'], mid_point['lng'])
-                
-                # Calculate elevation gradient (using fewer points to reduce API calls)
-                elevation_gradient = calculate_elevation_gradient(sample_points)
-                
-                # Get traffic density
-                traffic_density = get_traffic_density([sample_points[0], sample_points[-1]])
-                
-                # Estimate speed limit based on route type and Berlin context
-                distance_km = route.get('legs', [{}])[0].get('distance', {}).get('value', 0) / 1000
-                duration_hours = route.get('legs', [{}])[0].get('duration', {}).get('value', 3600) / 3600
-                avg_speed = distance_km / duration_hours if duration_hours > 0 else 50
-                
-                # Berlin-specific speed limit estimation
-                if 'autobahn' in route.get('summary', '').lower() or avg_speed > 80:
-                    speed_limit = min(max(avg_speed * 1.1, 80), 130)  # Autobahn speeds
-                elif 'ring' in route.get('summary', '').lower() or avg_speed > 60:
-                    speed_limit = min(max(avg_speed * 1.2, 60), 100)  # Ring roads
-                else:
-                    speed_limit = min(max(avg_speed * 1.3, 30), 70)   # City streets
-                
-                route_features = {
-                    'speed_limit_kmh': speed_limit,
-                    'elevation_gradient': elevation_gradient,
-                    'weather_temperature_celsius': weather_temp,
-                    'traffic_density': traffic_density
-                }
-                
-                # Calculate energy consumption
-                features_df = pd.DataFrame([list(route_features.values())], 
-                                         columns=['speed_limit_kmh', 'elevation_gradient', 
-                                                'weather_temperature_celsius', 'traffic_density'])
-                energy_consumption = model.predict(features_df)[0]
-                
-                route_info = {
-                    'route_index': i,
-                    'distance': leg['distance']['text'],
-                    'distance_value': leg['distance']['value'],
-                    'duration': leg['duration']['text'],
-                    'duration_value': leg['duration']['value'],
-                    'duration_in_traffic': leg.get('duration_in_traffic', leg['duration'])['text'],
-                    'polyline': route['overview_polyline']['points'],
-                    'bounds': route['bounds'],
-                    'features': route_features,
-                    'energy_consumption': float(energy_consumption),
-                    'summary': route.get('summary', f'Route {i+1}'),
-                    'route_type': 'energy_optimized' if i == 0 else 'alternative',
-                    'warnings': route.get('warnings', []),
-                    'copyrights': route.get('copyrights', '')
-                }
-                
-                routes.append(route_info)
-            
-            # Sort routes: first by energy consumption (for energy optimized), then by distance
-            routes.sort(key=lambda x: (x['energy_consumption'], x['distance_value']))
-            if routes:
-                routes[0]['route_type'] = 'energy_optimized'
-                if len(routes) > 1:
-                    # Find shortest distance route
-                    shortest_route = min(routes[1:], key=lambda x: x['distance_value'])
-                    shortest_route['route_type'] = 'shortest_distance'
-            
-            return routes
-        else:
-            error_msg = data.get('error_message', data['status'])
-            print(f"Google Directions API error: {error_msg}")
-            if data['status'] == 'ZERO_RESULTS':
-                return {'error': f"No routes found between '{origin}' and '{destination}' in Berlin area"}
-            
+            location = data['results'][0]['geometry']['location']
+            return (location['lat'], location['lng'])
     except Exception as e:
-        print(f"Error fetching routes: {e}")
-        return {'error': f'Route calculation failed: {str(e)}'}
+        logger.error(f"Geocoding error: {e}")
     
-    return []
+    return None
 
 @app.route('/')
 def home():
     return render_template('index.html')
 
+@app.route('/predict', methods=['POST'])
+def predict():
+    """Original prediction endpoint"""
+    logger.info("=== PREDICT ENDPOINT CALLED ===")
+    data = request.get_json()
+    origin = data.get('origin')
+    destination = data.get('destination')
+
+    if not origin or not destination:
+        return jsonify({'error': 'Origin and destination are required'}), 400
+
+    # Get route data
+    route_data = get_route_data(origin, destination)
+    if not route_data:
+        return jsonify({'error': 'Failed to fetch route data'}), 500
+
+    # Geocode addresses
+    origin_coords = geocode_address(origin)
+    dest_coords = geocode_address(destination)
+    
+    if not origin_coords or not dest_coords:
+        return jsonify({'error': 'Failed to geocode addresses'}), 500
+
+    # Calculate features
+    features = calculate_route_features(route_data, origin_coords, dest_coords)
+    
+    # Predict energy consumption
+    if model:
+        features_df = pd.DataFrame([[
+            features['speed_limit_kmh'],
+            features['elevation_gradient'],
+            features['weather_temperature_celsius'],
+            features['traffic_density']
+        ]], columns=['speed_limit_kmh', 'elevation_gradient', 'weather_temperature_celsius', 'traffic_density'])
+        prediction = model.predict(features_df)[0]
+    else:
+        # Fallback calculation if model is not available
+        prediction = features['distance_km'] * 0.2  # Rough estimate: 0.2 kWh/km
+    
+    return jsonify({
+        'energy_consumption': prediction,
+        'features': features
+    })
+
 @app.route('/optimize-routes', methods=['POST'])
 def optimize_routes():
-    """Get multiple optimized routes with real data"""
-    print("=== OPTIMIZE ROUTES ENDPOINT CALLED ===")
+    """Enhanced route optimization endpoint"""
+    logger.info("=== OPTIMIZE ROUTES ENDPOINT CALLED ===")
     
     try:
         data = request.get_json()
         origin = data.get('origin')
         destination = data.get('destination')
+        
+        logger.info(f"Processing routes from '{origin}' to '{destination}'")
 
         if not origin or not destination:
             return jsonify({'error': 'Origin and destination are required'}), 400
 
-        print(f"Processing routes from '{origin}' to '{destination}'")
+        # Get route data with alternatives
+        route_data = get_route_data(origin, destination)
+        if not route_data:
+            return jsonify({'error': 'Failed to fetch route data'}), 500
+
+        # Geocode addresses
+        origin_coords = geocode_address(origin)
+        dest_coords = geocode_address(destination)
         
-        # Get multiple routes with real data
-        routes = get_route_with_alternatives(origin, destination)
+        if not origin_coords or not dest_coords:
+            return jsonify({'error': 'Failed to geocode addresses'}), 500
+
+        # Process all route alternatives
+        routes = []
+        for i, route in enumerate(route_data['routes'][:3]):  # Limit to 3 routes
+            try:
+                # Create temporary route data for feature calculation
+                temp_route_data = {'routes': [route]}
+                features = calculate_route_features(temp_route_data, origin_coords, dest_coords)
+                
+                # Predict energy consumption
+                if model:
+                    features_df = pd.DataFrame([[
+                        features['speed_limit_kmh'],
+                        features['elevation_gradient'],
+                        features['weather_temperature_celsius'],
+                        features['traffic_density']
+                    ]], columns=['speed_limit_kmh', 'elevation_gradient', 'weather_temperature_celsius', 'traffic_density'])
+                    energy_consumption = float(model.predict(features_df)[0])
+                else:
+                    energy_consumption = float(features['distance_km'] * 0.2)
+                
+                route_info = {
+                    'route_id': i,
+                    'distance_km': float(features['distance_km']),
+                    'duration_minutes': float(features['duration_minutes']),
+                    'energy_consumption': energy_consumption,
+                    'features': {
+                        'speed_limit_kmh': float(features['speed_limit_kmh']),
+                        'elevation_gradient': float(features['elevation_gradient']),
+                        'weather_temperature_celsius': float(features['weather_temperature_celsius']),
+                        'traffic_density': float(features['traffic_density']),
+                        'weather_conditions': {
+                            'humidity': float(features['weather_conditions'].get('humidity', 50)),
+                            'wind_speed': float(features['weather_conditions'].get('wind_speed', 0)),
+                            'description': str(features['weather_conditions'].get('description', 'clear')),
+                            'visibility_km': float(features['weather_conditions'].get('visibility_km', 10))
+                        }
+                    },
+                    'polyline': str(route['overview_polyline']['points'])
+                }
+                routes.append(route_info)
+                
+            except Exception as e:
+                logger.error(f"Error processing route {i}: {e}")
+                continue
+
+        # Get charging stations near the destination
+        charging_stations = get_charging_stations(dest_coords[0], dest_coords[1])
         
-        if not routes:
-            return jsonify({'error': 'No routes found'}), 404
+        logger.info(f"Returning {len(routes)} routes and {len(charging_stations)} charging stations")
         
-        # Get charging stations along the route area
-        route_bounds = routes[0]['bounds']
-        charging_stations = get_charging_stations(route_bounds)
-        
-        result = {
+        return jsonify({
             'routes': routes,
             'charging_stations': charging_stations,
-            'weather_source': 'OpenWeather API',
-            'traffic_source': 'Google Maps Traffic',
-            'elevation_source': 'Google Elevation API'
-        }
-        
-        print(f"Returning {len(routes)} routes and {len(charging_stations)} charging stations")
-        return jsonify(result)
+            'origin_coords': origin_coords,
+            'destination_coords': dest_coords
+        })
         
     except Exception as e:
-        print(f"Error in optimize-routes endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
-
-# Keep the old endpoint for backward compatibility
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Legacy endpoint - redirects to new optimize-routes"""
-    return optimize_routes()
+        logger.error(f"Unexpected error in optimize_routes: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    print("Starting EV Route Optimizer with enhanced features...")
     print("Features enabled:")
-    print("- Real weather data (OpenWeather)")
-    print("- Real elevation data (Google Elevation)")
-    print("- Real traffic data (Google Traffic)")
-    print("- Multiple route alternatives")
-    print("- EV charging station locations")
+    print(f"- Real weather data (OpenWeather): {'✓' if OPENWEATHER_API_KEY else '✗'}")
+    print(f"- Real elevation data (Google Elevation): {'✓' if GOOGLE_MAPS_API_KEY else '✗'}")
+    print(f"- Real traffic data (Google Traffic): {'✓' if GOOGLE_MAPS_API_KEY else '✗'}")
+    print(f"- Multiple route alternatives: {'✓' if GOOGLE_MAPS_API_KEY else '✗'}")
+    print(f"- EV charging station locations: {'✓' if TOMTOM_API_KEY else '✗'}")
+    
     app.run(host='0.0.0.0', port=5000, debug=True)
