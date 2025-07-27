@@ -3,72 +3,709 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EV Route Optimizer - Berlin</title>
+    <title>Advanced EV Route Optimizer - Berlin</title>
     <style>
-        #map { height: 80vh; width: 100%; }
-        .controls { padding: 10px; }
-        input { margin: 5px; padding: 5px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            background: rgba(255,255,255,0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .input-group input {
+            flex: 1;
+            min-width: 250px;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .optimize-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .optimize-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .optimize-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            height: 70vh;
+        }
+        
+        .map-container {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .results-panel {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+        
+        .route-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #667eea;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .route-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .route-card.energy-optimized {
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        }
+        
+        .route-card.shortest-distance {
+            border-left-color: #ffc107;
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        }
+        
+        .route-card.selected {
+            border-left-width: 8px;
+            transform: translateX(8px);
+        }
+        
+        .route-type {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        
+        .energy-optimized .route-type { color: #28a745; }
+        .shortest-distance .route-type { color: #ffc107; }
+        .alternative .route-type { color: #6c757d; }
+        
+        .route-summary {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .route-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 8px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        
+        .energy-consumption {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .feature {
+            background: rgba(255,255,255,0.8);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+        
+        .feature-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .feature-value {
+            color: #667eea;
+            font-weight: 700;
+        }
+        
+        .charging-stations {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+        }
+        
+        .charging-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .station {
+            background: rgba(255,255,255,0.8);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 3px solid #17a2b8;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .station:hover {
+            background: rgba(255,255,255,1);
+            transform: translateX(3px);
+        }
+        
+        .station-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .station-info {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+            
+            .results-panel {
+                max-height: 400px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .input-group {
+                flex-direction: column;
+            }
+            
+            .input-group input {
+                min-width: 100%;
+            }
+        }
     </style>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry&callback=initMap" async defer></script>
 </head>
 <body>
-    <div class="controls">
-        <input type="text" id="origin" placeholder="Origin in Berlin (e.g., Brandenburg Gate)">
-        <input type="text" id="destination" placeholder="Destination in Berlin (e.g., Alexanderplatz)">
-        <button onclick="optimizeRoute()">Optimize Route</button>
-        <p id="result"></p>
+    <div class="container">
+        <div class="header">
+            <h1>🚗⚡ Advanced EV Route Optimizer</h1>
+            <p>Smart routing with real weather, traffic, elevation data & charging stations</p>
+        </div>
+        
+        <div class="controls">
+            <div class="input-group">
+                <input type="text" id="origin" placeholder="Origin (e.g., Brandenburg Gate, Potsdamer Platz, Tegel Airport)" value="Brandenburg Gate">
+                <input type="text" id="destination" placeholder="Destination (e.g., Alexanderplatz, Schönefeld Airport, Potsdam)" value="Alexanderplatz">
+            </div>
+            <button id="optimizeBtn" class="optimize-btn" onclick="optimizeRoutes()">
+                🔍 Find Optimal Routes
+            </button>
+        </div>
+        
+        <div class="main-content">
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+            <div class="results-panel" id="resultsPanel">
+                <div style="text-align: center; padding: 40px; color: #6c757d;">
+                    <h3>🗺️ Route Analysis</h3>
+                    <p>Enter origin and destination to get optimized EV routes with real-time data</p>
+                </div>
+            </div>
+        </div>
     </div>
-    <div id="map"></div>
 
     <script>
         let map;
+        let directionsRenderer = [];
+        let chargingStationMarkers = [];
+        let currentRoutes = [];
+        
+        const routeColors = ['#28a745', '#ffc107', '#6c757d', '#dc3545', '#17a2b8'];
 
         async function initMap() {
+            console.log('Initializing map...');
             const berlin = { lat: 52.5200, lng: 13.4050 };
+            
             map = new google.maps.Map(document.getElementById("map"), {
                 center: berlin,
-                zoom: 11,
-                restriction: {
-                    latLngBounds: { north: 52.675, south: 52.338, west: 13.089, east: 13.761 },
-                    strictBounds: true
+                zoom: 10,  // Wider zoom to show more of Berlin
+                // Removed strict bounds to allow all of Berlin metropolitan area
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+            
+            // Add Berlin boundary visualization (optional)
+            const berlinBounds = new google.maps.Rectangle({
+                bounds: {
+                    north: 52.675,
+                    south: 52.338,
+                    east: 13.761,
+                    west: 13.089
+                },
+                strokeColor: '#667eea',
+                strokeOpacity: 0.3,
+                strokeWeight: 2,
+                fillColor: '#667eea',
+                fillOpacity: 0.1,
+                map: map
+            });
+        }
+
+        function clearMapElements() {
+            // Clear existing route renderers
+            directionsRenderer.forEach(renderer => renderer.setMap(null));
+            directionsRenderer = [];
+            
+            // Clear charging station markers
+            chargingStationMarkers.forEach(marker => marker.setMap(null));
+            chargingStationMarkers = [];
+        }
+
+        function displayRoutes(routes) {
+            clearMapElements();
+            
+            routes.forEach((route, index) => {
+                const renderer = new google.maps.DirectionsRenderer({
+                    polylineOptions: {
+                        strokeColor: routeColors[index],
+                        strokeWeight: index === 0 ? 6 : 4,
+                        strokeOpacity: index === 0 ? 0.8 : 0.6
+                    },
+                    suppressMarkers: false,
+                    suppressInfoWindows: false
+                });
+                
+                renderer.setMap(map);
+                
+                // Create a directions request to display the route
+                const directionsService = new google.maps.DirectionsService();
+                
+                // We'll use the polyline to create waypoints for display
+                const decodedPath = google.maps.geometry.encoding.decodePath(route.polyline);
+                
+                // Create directions request using start and end points
+                const request = {
+                    origin: decodedPath[0],
+                    destination: decodedPath[decodedPath.length - 1],
+                    travelMode: google.maps.TravelMode.DRIVING,
+                    provideRouteAlternatives: false
+                };
+                
+                directionsService.route(request, (result, status) => {
+                    if (status === 'OK') {
+                        renderer.setDirections(result);
+                    }
+                });
+                
+                directionsRenderer.push(renderer);
+            });
+        }
+
+        function displayChargingStations(stations) {
+            stations.forEach(station => {
+                const marker = new google.maps.Marker({
+                    position: { lat: station.lat, lng: station.lng },
+                    map: map,
+                    title: station.name,
+                    icon: {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" fill="#17a2b8"/>
+                                <path d="M8 8h8v8H8z" fill="white"/>
+                                <path d="M10 10v4M14 10v4" stroke="#17a2b8" stroke-width="2"/>
+                            </svg>
+                        `),
+                        scaledSize: new google.maps.Size(30, 30)
+                    }
+                });
+                
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="padding: 10px;">
+                            <h4 style="margin: 0 0 8px 0; color: #333;">${station.name}</h4>
+                            <p style="margin: 0; color: #666; font-size: 14px;">${station.vicinity}</p>
+                            <p style="margin: 4px 0 0 0; color: #17a2b8; font-weight: 600;">
+                                ⭐ ${station.rating || 'N/A'}
+                            </p>
+                        </div>
+                    `
+                });
+                
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+                
+                chargingStationMarkers.push(marker);
+            });
+        }
+
+        function renderRouteCard(route, index) {
+            const routeTypeClass = route.route_type.replace('_', '-');
+            const routeTypeLabel = route.route_type.replace('_', ' ').toUpperCase();
+            
+            return `
+                <div class="route-card ${routeTypeClass}" onclick="selectRoute(${index})" data-route-index="${index}">
+                    <div class="route-type">${routeTypeLabel}</div>
+                    <div class="route-summary">${route.summary}</div>
+                    
+                    <div class="route-stats">
+                        <div class="stat">
+                            <div class="stat-value">${route.distance}</div>
+                            <div class="stat-label">Distance</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${route.duration}</div>
+                            <div class="stat-label">Duration</div>
+                        </div>
+                    </div>
+                    
+                    <div class="energy-consumption">
+                        <div style="font-size: 20px; font-weight: 700;">
+                            ⚡ ${route.energy_consumption.toFixed(1)} kWh
+                        </div>
+                        <div style="font-size: 12px; opacity: 0.9;">Predicted Energy Consumption</div>
+                    </div>
+                    
+                    <div class="features-grid">
+                        <div class="feature">
+                            <div class="feature-label">Speed Limit</div>
+                            <div class="feature-value">${route.features.speed_limit_kmh.toFixed(0)} km/h</div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-label">Elevation</div>
+                            <div class="feature-value">${route.features.elevation_gradient.toFixed(3)}</div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-label">Temperature</div>
+                            <div class="feature-value">${route.features.weather_temperature_celsius.toFixed(1)}°C</div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-label">Traffic</div>
+                            <div class="feature-value">${(route.features.traffic_density * 100).toFixed(0)}%</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderChargingStations(stations) {
+            if (!stations || stations.length === 0) {
+                return '<p style="text-align: center; color: #6c757d; font-style: italic;">No charging stations found in the area</p>';
+            }
+            
+            return stations.slice(0, 5).map(station => `
+                <div class="station" onclick="focusOnStation(${station.lat}, ${station.lng})">
+                    <div class="station-name">🔌 ${station.name}</div>
+                    <div class="station-info">
+                        📍 ${station.vicinity}<br>
+                        ⭐ Rating: ${station.rating || 'N/A'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function selectRoute(index) {
+            // Remove previous selection
+            document.querySelectorAll('.route-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // Add selection to clicked route
+            document.querySelector(`[data-route-index="${index}"]`).classList.add('selected');
+            
+            // Highlight the route on map
+            directionsRenderer.forEach((renderer, i) => {
+                const polylineOptions = {
+                    strokeColor: routeColors[i],
+                    strokeWeight: i === index ? 8 : 3,
+                    strokeOpacity: i === index ? 1.0 : 0.4
+                };
+                
+                // Update the renderer options
+                renderer.setOptions({
+                    polylineOptions: polylineOptions
+                });
+            });
+        }
+
+        function focusOnStation(lat, lng) {
+            map.setCenter({ lat, lng });
+            map.setZoom(16);
+            
+            // Find and open the info window for this station
+            chargingStationMarkers.forEach(marker => {
+                if (Math.abs(marker.getPosition().lat() - lat) < 0.001 && 
+                    Math.abs(marker.getPosition().lng() - lng) < 0.001) {
+                    google.maps.event.trigger(marker, 'click');
                 }
             });
         }
 
-        async function optimizeRoute() {
-            alert('Button clicked!'); // Temporary debug
+        async function optimizeRoutes() {
+            console.log('=== optimizeRoutes function called ===');
+            
             const origin = document.getElementById('origin').value;
             const destination = document.getElementById('destination').value;
+            const btn = document.getElementById('optimizeBtn');
+            const resultsPanel = document.getElementById('resultsPanel');
 
             if (!origin || !destination) {
-                document.getElementById('result').textContent = 'Please enter both origin and destination.';
+                resultsPanel.innerHTML = '<div class="error">Please enter both origin and destination.</div>';
                 return;
             }
 
+            // Update UI to loading state
+            btn.disabled = true;
+            btn.textContent = '🔄 Optimizing Routes...';
+            resultsPanel.innerHTML = '<div class="loading">🔍 Analyzing routes with real-time data...<br><small>This may take a few moments</small></div>';
+
             try {
-                const response = await fetch('http://localhost:5000/predict', {
+                console.log('Making request to /optimize-routes');
+                const response = await fetch('/optimize-routes', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({ origin, destination })
                 });
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
+                console.log('Response data:', data);
 
                 if (data.error) {
-                    document.getElementById('result').textContent = `Error: ${data.error}`;
-                } else {
-                    document.getElementById('result').textContent = 
-                        `Predicted Energy Consumption: ${data.energy_consumption.toFixed(2)} kWh\n` +
-                        `Features: Speed Limit: ${data.features.speed_limit_kmh.toFixed(2)} km/h, ` +
-                        `Elevation: ${data.features.elevation_gradient.toFixed(4)}, ` +
-                        `Temp: ${data.features.weather_temperature_celsius.toFixed(2)}°C, ` +
-                        `Traffic Density: ${data.features.traffic_density.toFixed(2)}`;
+                    throw new Error(data.error);
                 }
+
+                if (!data.routes || data.routes.length === 0) {
+                    throw new Error('No routes found for the specified locations');
+                }
+
+                currentRoutes = data.routes;
+
+                // Display routes on map
+                displayRoutes(data.routes);
+                displayChargingStations(data.charging_stations);
+
+                // Render results panel
+                const routeCardsHtml = data.routes.map((route, index) => renderRouteCard(route, index)).join('');
+                const chargingStationsHtml = renderChargingStations(data.charging_stations);
+
+                resultsPanel.innerHTML = `
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="color: #333; margin-bottom: 15px;">📊 Route Analysis Results</h3>
+                        <div style="background: rgba(102, 126, 234, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 12px; text-align: center;">
+                                <div><strong>🌤️ Weather:</strong> Real-time</div>
+                                <div><strong>🚦 Traffic:</strong> Live data</div>
+                                <div><strong>⛰️ Elevation:</strong> Precise</div>
+                                <div><strong>🔌 Charging:</strong> Updated</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #333; margin-bottom: 15px;">🛣️ Available Routes</h4>
+                        ${routeCardsHtml}
+                    </div>
+                    
+                    <div class="charging-stations">
+                        <div class="charging-title">
+                            🔌 Nearby Charging Stations
+                        </div>
+                        ${chargingStationsHtml}
+                    </div>
+                `;
+
+                // Auto-select the first (energy optimized) route
+                if (data.routes.length > 0) {
+                    setTimeout(() => selectRoute(0), 500);
+                }
+
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('result').textContent = `Failed to optimize route: ${error.message}`;
+                resultsPanel.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Route Optimization Failed</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <hr style="margin: 15px 0;">
+                        <h5>🔧 Troubleshooting:</h5>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li>Verify Flask server is running on port 5000</li>
+                            <li>Check API keys in .env file</li>
+                            <li>Ensure locations are in Berlin area</li>
+                            <li>Check browser console for detailed errors</li>
+                        </ul>
+                    </div>
+                `;
+            } finally {
+                // Reset button state
+                btn.disabled = false;
+                btn.textContent = '🔍 Find Optimal Routes';
             }
         }
+
+        // Add event listeners when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded - Advanced EV Route Optimizer');
+            
+            // Add event listener for Enter key on input fields
+            ['origin', 'destination'].forEach(id => {
+                document.getElementById(id).addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        optimizeRoutes();
+                    }
+                });
+            });
+        });
+
+        // Global error handler for Google Maps
+        window.gm_authFailure = function() {
+            console.error('Google Maps authentication failed');
+            document.getElementById('resultsPanel').innerHTML = `
+                <div class="error">
+                    <h4>❌ Google Maps Authentication Failed</h4>
+                    <p>Please check your Google Maps API key configuration.</p>
+                </div>
+            `;
+        };
     </script>
 </body>
 </html>
