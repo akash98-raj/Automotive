@@ -14,7 +14,7 @@
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -40,6 +40,30 @@
             flex-wrap: wrap;
         }
         
+        .settings-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        
+        .range-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
         input[type="text"] {
             flex: 1;
             min-width: 250px;
@@ -53,6 +77,10 @@
         input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
+        }
+        
+        input[type="range"] {
+            width: 100px;
         }
         
         .optimize-btn {
@@ -87,6 +115,53 @@
             min-height: 100px;
         }
         
+        .comparison-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .route-comparison {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid transparent;
+        }
+        
+        .route-comparison.ev-optimized {
+            border-color: #28a745;
+        }
+        
+        .route-comparison.standard {
+            border-color: #6c757d;
+        }
+        
+        .route-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .route-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .route-badge.ev {
+            background: #28a745;
+            color: white;
+        }
+        
+        .route-badge.standard {
+            background: #6c757d;
+            color: white;
+        }
+        
         .result-section {
             margin-bottom: 20px;
         }
@@ -109,7 +184,7 @@
         
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -152,6 +227,26 @@
             margin-right: 5px;
         }
         
+        .charging-stations {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 15px;
+        }
+        
+        .charging-station {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .charging-station:last-child {
+            border-bottom: none;
+        }
+        
         .loading {
             text-align: center;
             color: #666;
@@ -177,7 +272,7 @@
         }
         
         #map { 
-            height: 400px; 
+            height: 500px; 
             width: 100%; 
             border-radius: 15px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -191,9 +286,48 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
         
+        .map-legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 4px;
+            border-radius: 2px;
+        }
+        
+        .legend-color.ev-route {
+            background: #28a745;
+        }
+        
+        .legend-color.standard-route {
+            background: #6c757d;
+        }
+        
+        .legend-color.charging {
+            background: #ffc107;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
         @media (max-width: 768px) {
-            .input-group {
+            .input-group, .settings-group {
                 flex-direction: column;
+            }
+            
+            .comparison-container {
+                grid-template-columns: 1fr;
             }
             
             input[type="text"] {
@@ -210,7 +344,7 @@
     <div class="container">
         <div class="header">
             <h1>🚗⚡ Enhanced EV Route Optimizer</h1>
-            <p>Real-time energy consumption prediction for Berlin routes</p>
+            <p>Real-time energy consumption prediction with charging stations & route comparison</p>
         </div>
         
         <div class="controls">
@@ -221,17 +355,47 @@
                     Optimize Route
                 </button>
             </div>
+            
+            <div class="settings-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="showCharging" checked>
+                    <label for="showCharging">Show Charging Stations</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="avoidTraffic" checked>
+                    <label for="avoidTraffic">Consider Traffic</label>
+                </div>
+                <div class="range-group">
+                    <label>Search Radius:</label>
+                    <input type="range" id="chargingRadius" min="1" max="10" value="5">
+                    <span id="radiusValue">5km</span>
+                </div>
+            </div>
         </div>
         
         <div class="results" id="results">
             <div class="loading">
-                Enter origin and destination to get energy consumption predictions with real route data!
+                Enter origin and destination to get energy consumption predictions with route comparison!
             </div>
         </div>
         
         <div class="map-container">
             <div id="mapStatus" class="debug-info">
                 🔄 Initializing Google Maps...
+            </div>
+            <div class="map-legend">
+                <div class="legend-item">
+                    <div class="legend-color ev-route"></div>
+                    <span>EV Optimized Route</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color standard-route"></div>
+                    <span>Standard Shortest Route</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color charging"></div>
+                    <span>Charging Stations</span>
+                </div>
             </div>
             <div id="map"></div>
         </div>
@@ -240,10 +404,16 @@
     <script>
         let map;
         let directionsService;
-        let directionsRenderer;
+        let evRouteRenderer;
+        let standardRouteRenderer;
         let mapInitialized = false;
+        let chargingStationMarkers = [];
 
-        // Add debug logging
+        // Update radius display
+        document.getElementById('chargingRadius').addEventListener('input', function() {
+            document.getElementById('radiusValue').textContent = this.value + 'km';
+        });
+
         function updateMapStatus(message, isError = false) {
             const statusDiv = document.getElementById('mapStatus');
             if (statusDiv) {
@@ -253,14 +423,11 @@
             console.log(isError ? '❌' : '✅', message);
         }
 
-        // Global error handler for Google Maps
         window.gm_authFailure = function() {
             console.error('❌ Google Maps authentication failed');
             updateMapStatus('Google Maps authentication failed. Check API key.', true);
-            document.getElementById('map').innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Google Maps authentication failed. Route optimization will still work without map display.</div>';
         };
 
-        // Initialize map when Google Maps API loads
         function initMap() {
             try {
                 updateMapStatus('Google Maps API loaded, creating map...');
@@ -278,41 +445,48 @@
                             east: 13.761 
                         },
                         strictBounds: true
-                    },
-                    styles: [
-                        {
-                            "featureType": "all",
-                            "elementType": "geometry.fill",
-                            "stylers": [{"weight": "2.00"}]
-                        },
-                        {
-                            "featureType": "all",
-                            "elementType": "geometry.stroke",
-                            "stylers": [{"color": "#9c9c9c"}]
-                        },
-                        {
-                            "featureType": "all",
-                            "elementType": "labels.text",
-                            "stylers": [{"visibility": "on"}]
-                        }
-                    ]
+                    }
                 });
                 
                 directionsService = new google.maps.DirectionsService();
-                directionsRenderer = new google.maps.DirectionsRenderer({
+                
+                // EV Optimized Route Renderer (Green)
+                evRouteRenderer = new google.maps.DirectionsRenderer({
                     draggable: false,
                     polylineOptions: {
-                        strokeColor: "#667eea",
-                        strokeWeight: 5,
+                        strokeColor: "#28a745",
+                        strokeWeight: 6,
                         strokeOpacity: 0.8
+                    },
+                    markerOptions: {
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: "#28a745",
+                            fillOpacity: 1,
+                            strokeColor: "#ffffff",
+                            strokeWeight: 2
+                        }
                     }
                 });
-                directionsRenderer.setMap(map);
+                evRouteRenderer.setMap(map);
+                
+                // Standard Route Renderer (Gray)
+                standardRouteRenderer = new google.maps.DirectionsRenderer({
+                    draggable: false,
+                    suppressMarkers: true, // Don't show duplicate markers
+                    polylineOptions: {
+                        strokeColor: "#6c757d",
+                        strokeWeight: 4,
+                        strokeOpacity: 0.6,
+                        strokePattern: [10, 5] // Dashed line
+                    }
+                });
+                standardRouteRenderer.setMap(map);
                 
                 mapInitialized = true;
                 updateMapStatus('✅ Google Maps initialized successfully!');
                 
-                // Hide status after 3 seconds if successful
                 setTimeout(() => {
                     const statusDiv = document.getElementById('mapStatus');
                     if (statusDiv && !statusDiv.className.includes('error')) {
@@ -323,156 +497,350 @@
             } catch (error) {
                 console.error('❌ Google Maps initialization error:', error);
                 updateMapStatus(`Map initialization failed: ${error.message}`, true);
-                document.getElementById('map').innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Map could not be loaded. Route optimization will still work.</div>';
             }
         }
 
-        // Fallback initialization if callback doesn't work
-        window.addEventListener('load', function() {
-            setTimeout(() => {
-                if (!mapInitialized && typeof google !== 'undefined' && google.maps) {
-                    console.log('🔄 Fallback: Initializing map manually...');
-                    initMap();
-                } else if (!mapInitialized) {
-                    updateMapStatus('Google Maps API failed to load. Check your internet connection and API key.', true);
+        function clearChargingStations() {
+            chargingStationMarkers.forEach(marker => marker.setMap(null));
+            chargingStationMarkers = [];
+        }
+
+        function findChargingStations(route) {
+            if (!document.getElementById('showCharging').checked) return [];
+            
+            const radius = document.getElementById('chargingRadius').value * 1000; // Convert to meters
+            const service = new google.maps.places.PlacesService(map);
+            const chargingStations = [];
+            
+            // Get route path points
+            const path = route.overview_path || [];
+            const searchPoints = [];
+            
+            // Sample points along the route for charging station search
+            for (let i = 0; i < path.length; i += Math.max(1, Math.floor(path.length / 5))) {
+                searchPoints.push(path[i]);
+            }
+            
+            let searchesCompleted = 0;
+            const totalSearches = searchPoints.length;
+            
+            return new Promise((resolve) => {
+                if (searchPoints.length === 0) {
+                    resolve([]);
+                    return;
                 }
-            }, 2000);
-        });
+                
+                searchPoints.forEach((point, index) => {
+                    const request = {
+                        location: point,
+                        radius: radius,
+                        keyword: 'electric vehicle charging station OR EV charging OR Tesla supercharger',
+                        type: ['gas_station']
+                    };
+                    
+                    service.nearbySearch(request, (results, status) => {
+                        searchesCompleted++;
+                        
+                        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                            results.forEach(place => {
+                                // Avoid duplicates by checking if station already exists
+                                const existing = chargingStations.find(station => 
+                                    Math.abs(station.lat - place.geometry.location.lat()) < 0.001 &&
+                                    Math.abs(station.lng - place.geometry.location.lng()) < 0.001
+                                );
+                                
+                                if (!existing) {
+                                    chargingStations.push({
+                                        name: place.name,
+                                        lat: place.geometry.location.lat(),
+                                        lng: place.geometry.location.lng(),
+                                        rating: place.rating || 'N/A',
+                                        vicinity: place.vicinity
+                                    });
+                                }
+                            });
+                        }
+                        
+                        if (searchesCompleted === totalSearches) {
+                            resolve(chargingStations);
+                        }
+                    });
+                });
+                
+                // Timeout fallback
+                setTimeout(() => {
+                    if (searchesCompleted < totalSearches) {
+                        resolve(chargingStations);
+                    }
+                }, 5000);
+            });
+        }
+
+        function displayChargingStations(stations) {
+            clearChargingStations();
+            
+            stations.forEach(station => {
+                const marker = new google.maps.Marker({
+                    position: { lat: station.lat, lng: station.lng },
+                    map: map,
+                    title: station.name,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 6,
+                        fillColor: "#ffc107",
+                        fillOpacity: 1,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2
+                    }
+                });
+                
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="max-width: 200px;">
+                            <h4 style="margin: 0 0 5px 0; color: #333;">${station.name}</h4>
+                            <p style="margin: 0; font-size: 12px; color: #666;">${station.vicinity}</p>
+                            <p style="margin: 5px 0 0 0; font-size: 12px;">⭐ Rating: ${station.rating}</p>
+                        </div>
+                    `
+                });
+                
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+                
+                chargingStationMarkers.push(marker);
+            });
+        }
 
         async function optimizeRoute() {
             const origin = document.getElementById('origin').value.trim();
             const destination = document.getElementById('destination').value.trim();
             const resultsDiv = document.getElementById('results');
             const optimizeBtn = document.getElementById('optimizeBtn');
+            const considerTraffic = document.getElementById('avoidTraffic').checked;
 
             if (!origin || !destination) {
                 resultsDiv.innerHTML = '<div class="error">⚠️ Please enter both origin and destination.</div>';
                 return;
             }
 
-            // Show loading state
             optimizeBtn.disabled = true;
-            optimizeBtn.textContent = 'Analyzing Route...';
-            resultsDiv.innerHTML = '<div class="loading">🔄 Extracting real route data (speed limits, elevation, weather, traffic)...</div>';
+            optimizeBtn.textContent = 'Analyzing Routes...';
+            resultsDiv.innerHTML = '<div class="loading">🔄 Comparing EV optimized vs standard routes...</div>';
 
             try {
-                // Show route on map if available
-                if (mapInitialized && directionsService && directionsRenderer) {
-                    const request = {
+                if (mapInitialized && directionsService) {
+                    // Request both routes simultaneously
+                    const baseRequest = {
                         origin: origin,
                         destination: destination,
                         travelMode: google.maps.TravelMode.DRIVING,
                         unitSystem: google.maps.UnitSystem.METRIC,
-                        avoidHighways: false,
                         avoidTolls: false
                     };
 
-                    try {
-                        directionsService.route(request, (result, status) => {
-                            if (status === 'OK' && result) {
-                                directionsRenderer.setDirections(result);
-                                console.log('✅ Route displayed on map');
-                                updateMapStatus('✅ Route displayed on map');
-                            } else {
-                                console.log('⚠️ Could not display route on map:', status);
-                                updateMapStatus(`Could not display route: ${status}`, true);
+                    // EV Optimized Route (avoid highways for efficiency, consider traffic)
+                    const evRequest = {
+                        ...baseRequest,
+                        avoidHighways: true,
+                        ...(considerTraffic && {
+                            drivingOptions: {
+                                departureTime: new Date(),
+                                trafficModel: google.maps.TrafficModel.BEST_GUESS
                             }
-                        });
-                    } catch (mapError) {
-                        console.log('⚠️ Map display error:', mapError);
-                        updateMapStatus(`Map display error: ${mapError.message}`, true);
-                    }
-                } else {
-                    console.log('⚠️ Map not available for route display');
-                    updateMapStatus('Map not available for route display', true);
+                        })
+                    };
+
+                    // Standard Fastest Route
+                    const standardRequest = {
+                        ...baseRequest,
+                        avoidHighways: false,
+                        ...(considerTraffic && {
+                            drivingOptions: {
+                                departureTime: new Date(),
+                                trafficModel: google.maps.TrafficModel.BEST_GUESS
+                            }
+                        })
+                    };
+
+                    // Get both routes
+                    const [evResult, standardResult] = await Promise.all([
+                        new Promise((resolve, reject) => {
+                            directionsService.route(evRequest, (result, status) => {
+                                if (status === 'OK') resolve(result);
+                                else reject(status);
+                            });
+                        }),
+                        new Promise((resolve, reject) => {
+                            directionsService.route(standardRequest, (result, status) => {
+                                if (status === 'OK') resolve(result);
+                                else reject(status);
+                            });
+                        })
+                    ]);
+
+                    // Display both routes
+                    evRouteRenderer.setDirections(evResult);
+                    standardRouteRenderer.setDirections(standardResult);
+
+                    // Find charging stations along EV route
+                    const chargingStations = await findChargingStations(evResult.routes[0]);
+                    displayChargingStations(chargingStations);
+
+                    updateMapStatus(`✅ Routes displayed: EV route (green), Standard route (gray dashed)`);
                 }
 
-                // Get energy prediction from backend
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ origin, destination })
-                });
+                // Get energy predictions for both routes
+                const [evPrediction, standardPrediction] = await Promise.all([
+                    fetch('/predict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            origin, 
+                            destination,
+                            route_type: 'ev_optimized',
+                            avoid_highways: true,
+                            consider_traffic: considerTraffic
+                        })
+                    }).then(r => r.json()),
+                    fetch('/predict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            origin, 
+                            destination,
+                            route_type: 'standard',
+                            avoid_highways: false,
+                            consider_traffic: considerTraffic
+                        })
+                    }).then(r => r.json())
+                ]);
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                if (data.error) {
-                    resultsDiv.innerHTML = `<div class="error">❌ ${data.error}</div>`;
+                if (evPrediction.error || standardPrediction.error) {
+                    resultsDiv.innerHTML = `<div class="error">❌ ${evPrediction.error || standardPrediction.error}</div>`;
                 } else {
-                    displayResults(data);
+                    displayRouteComparison(evPrediction, standardPrediction, chargingStations);
                 }
 
             } catch (error) {
                 console.error('Error:', error);
-                resultsDiv.innerHTML = `<div class="error">❌ Failed to optimize route: ${error.message}<br><small>Please check that both locations are in Berlin and try again.</small></div>`;
+                resultsDiv.innerHTML = `<div class="error">❌ Failed to optimize route: ${error.message}</div>`;
             } finally {
                 optimizeBtn.disabled = false;
                 optimizeBtn.textContent = 'Optimize Route';
             }
         }
 
-        function displayResults(data) {
+        function displayRouteComparison(evData, standardData, chargingStations) {
             const resultsDiv = document.getElementById('results');
             
-            const featuresHtml = `
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-label">Speed Limit</div>
-                        <div class="feature-value">${data.features.speed_limit_kmh.toFixed(1)} km/h</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Elevation Gradient</div>
-                        <div class="feature-value">${(data.features.elevation_gradient * 100).toFixed(2)}%</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Temperature</div>
-                        <div class="feature-value">${data.features.weather_temperature_celsius.toFixed(1)}°C</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Weather</div>
-                        <div class="feature-value">${data.features.weather_condition || 'Clear'}</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Wind Speed</div>
-                        <div class="feature-value">${(data.features.wind_speed || 0).toFixed(1)} m/s</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Humidity</div>
-                        <div class="feature-value">${(data.features.humidity || 0).toFixed(0)}%</div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-label">Traffic Density</div>
-                        <div class="feature-value">${(data.features.traffic_density * 100).toFixed(0)}%</div>
-                    </div>
-                </div>
-            `;
+            const energySavings = standardData.energy_consumption - evData.energy_consumption;
+            const timeDifference = evData.features.duration_minutes - standardData.features.duration_minutes;
+            const distanceDifference = evData.features.distance_km - standardData.features.distance_km;
             
-            const insightsHtml = data.insights && data.insights.length > 0 ? `
+            const chargingStationsHtml = chargingStations.length > 0 ? `
                 <div class="result-section">
-                    <div class="result-title">💡 Route Insights</div>
-                    <div class="insights">
-                        ${data.insights.map(insight => `<div class="insight-item">${insight}</div>`).join('')}
+                    <div class="result-title">🔋 Nearby Charging Stations (${chargingStations.length})</div>
+                    <div class="charging-stations">
+                        ${chargingStations.slice(0, 5).map(station => `
+                            <div class="charging-station">
+                                <div>
+                                    <strong>${station.name}</strong><br>
+                                    <small>${station.vicinity}</small>
+                                </div>
+                                <div>⭐ ${station.rating}</div>
+                            </div>
+                        `).join('')}
+                        ${chargingStations.length > 5 ? `<div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">...and ${chargingStations.length - 5} more stations</div>` : ''}
                     </div>
                 </div>
             ` : '';
             
             resultsDiv.innerHTML = `
-                <div class="result-section">
-                    <div class="result-title">⚡ Energy Consumption Prediction</div>
-                    <div class="energy-consumption">${data.energy_consumption.toFixed(2)} kWh</div>
-                    <div style="color: #666; margin-bottom: 15px;">${data.route_summary}</div>
+                <div class="comparison-container">
+                    <div class="route-comparison ev-optimized">
+                        <div class="route-header">
+                            <span class="route-badge ev">EV Optimized</span>
+                            <span>🌱 Eco-Friendly Route</span>
+                        </div>
+                        <div class="energy-consumption">${evData.energy_consumption.toFixed(2)} kWh</div>
+                        <div style="color: #666; margin-bottom: 15px;">
+                            Distance: ${evData.features.distance_km.toFixed(1)} km<br>
+                            Duration: ${evData.features.duration_minutes.toFixed(0)} min<br>
+                            Traffic Considered: ${document.getElementById('avoidTraffic').checked ? 'Yes' : 'No'}
+                        </div>
+                        <div class="features-grid">
+                            <div class="feature-card">
+                                <div class="feature-label">Avg Speed</div>
+                                <div class="feature-value">${evData.features.speed_limit_kmh.toFixed(0)} km/h</div>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-label">Traffic Impact</div>
+                                <div class="feature-value">${(evData.features.traffic_density * 100).toFixed(0)}%</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="route-comparison standard">
+                        <div class="route-header">
+                            <span class="route-badge standard">Standard</span>
+                            <span>⚡ Fastest Route</span>
+                        </div>
+                        <div class="energy-consumption">${standardData.energy_consumption.toFixed(2)} kWh</div>
+                        <div style="color: #666; margin-bottom: 15px;">
+                            Distance: ${standardData.features.distance_km.toFixed(1)} km<br>
+                            Duration: ${standardData.features.duration_minutes.toFixed(0)} min<br>
+                            Traffic Considered: ${document.getElementById('avoidTraffic').checked ? 'Yes' : 'No'}
+                        </div>
+                        <div class="features-grid">
+                            <div class="feature-card">
+                                <div class="feature-label">Avg Speed</div>
+                                <div class="feature-value">${standardData.features.speed_limit_kmh.toFixed(0)} km/h</div>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-label">Traffic Impact</div>
+                                <div class="feature-value">${(standardData.features.traffic_density * 100).toFixed(0)}%</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="result-section">
-                    <div class="result-title">📊 Real Route Data</div>
-                    ${featuresHtml}
+                    <div class="result-title">📊 Route Comparison Summary</div>
+                    <div class="insights">
+                        <div class="insight-item">
+                            Energy ${energySavings > 0 ? 'Savings' : 'Difference'}: ${Math.abs(energySavings).toFixed(2)} kWh 
+                            ${energySavings > 0 ? '(EV route is more efficient)' : '(Standard route is more efficient)'}
+                        </div>
+                        <div class="insight-item">
+                            Time Difference: ${Math.abs(timeDifference).toFixed(0)} minutes 
+                            ${timeDifference > 0 ? '(EV route takes longer)' : '(EV route is faster)'}
+                        </div>
+                        <div class="insight-item">
+                            Distance Difference: ${Math.abs(distanceDifference).toFixed(1)} km 
+                            ${distanceDifference > 0 ? '(EV route is longer)' : '(EV route is shorter)'}
+                        </div>
+                        <div class="insight-item">
+                            Traffic Consideration: ${document.getElementById('avoidTraffic').checked ? 'Real-time traffic data used for both routes' : 'Traffic not considered in routing'}
+                        </div>
+                    </div>
                 </div>
                 
-                ${insightsHtml}
+                ${chargingStationsHtml}
+                
+                <div class="result-section">
+                    <div class="result-title">🌦️ Current Conditions</div>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-label">Wind Speed</div>
+                            <div class="feature-value">${evData.features.wind_speed.toFixed(1)} m/s</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-label">Humidity</div>
+                            <div class="feature-value">${evData.features.humidity.toFixed(0)}%</div>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
@@ -487,12 +855,32 @@
                 });
             });
         });
+
+        // Fallback initialization
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                if (!mapInitialized && typeof google !== 'undefined' && google.maps) {
+                    console.log('🔄 Fallback: Initializing map manually...');
+                    initMap();
+                } else if (!mapInitialized) {
+                    updateMapStatus('Google Maps API failed to load. Check your internet connection and API key.', true);
+                }
+            }, 2000);
+        });
     </script>
     
-    <!-- Load Google Maps API with explicit callback -->
+    <!-- Load Google Maps API with Places library for charging stations -->
     <script async defer 
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry&callback=initMap"
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry,places&callback=initMap"
         onerror="updateMapStatus('Failed to load Google Maps API script', true);">
     </script>
 </body>
-</html>
+</html>label">Temperature</div>
+                            <div class="feature-value">${evData.features.weather_temperature_celsius.toFixed(1)}°C</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-label">Weather</div>
+                            <div class="feature-value">${evData.features.weather_condition}</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-

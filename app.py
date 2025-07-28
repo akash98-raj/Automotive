@@ -27,11 +27,15 @@ try:
     y = csv_data['energy_consumption']
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X, y)
+    # Store feature names for consistent prediction
+    feature_names = X.columns.tolist()
     print("✅ ML model trained successfully")
+    print(f"✅ Feature names: {feature_names}")
 except Exception as e:
     print(f"❌ Error loading training data: {e}")
     # Create a dummy model for testing
     model = None
+    feature_names = ['speed_limit_kmh', 'elevation_gradient', 'weather_temperature_celsius', 'traffic_density']
 
 def get_elevation_profile(coordinates):
     """Get elevation data for route coordinates using Google Elevation API"""
@@ -481,14 +485,17 @@ def predict():
             
             prediction = base_consumption * distance_factor * temp_factor * traffic_factor * speed_factor
         else:
-            # Use trained ML model
-            features_array = np.array([[
+            # Use trained ML model with proper feature names
+            # Create DataFrame with correct feature names to avoid warning
+            features_df = pd.DataFrame([[
                 features['speed_limit_kmh'], 
                 features['elevation_gradient'],
                 features['weather_temperature_celsius'], 
                 features['traffic_density']
-            ]])
-            prediction = model.predict(features_array)[0]
+            ]], columns=feature_names)
+            
+            prediction = model.predict(features_df)[0]
+            print(f"✅ ML prediction: {prediction:.3f} kWh")
         
         # Add some insights
         insights = generate_insights(features, prediction)
