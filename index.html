@@ -12,6 +12,136 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
         }
+
+        function findChargingStations(route) {
+            if (!mapInitialized || mapFailure) {
+                console.log('⚠️ Map not available for charging station search');
+                return;
+            }
+
+            try {
+                // Clear existing charging station markers
+                clearChargingStations();
+
+                // Get route coordinates
+                const path = route.overview_path;
+                if (!path || path.length === 0) {
+                    console.log('⚠️ No route path available for charging station search');
+                    return;
+                }
+
+                console.log('🔍 Searching for charging stations along route...');
+
+                // Search for charging stations along the route
+                const service = new google.maps.places.PlacesService(map);
+                
+                // Sample points along the route (every ~5km)
+                const samplePoints = [];
+                const totalPoints = path.length;
+                const step = Math.max(1, Math.floor(totalPoints / 10)); // Max 10 search points
+                
+                for (let i = 0; i < totalPoints; i += step) {
+                    samplePoints.push(path[i]);
+                }
+
+                let stationCount = 0;
+                let searchesCompleted = 0;
+                const totalSearches = samplePoints.length;
+
+                samplePoints.forEach((point, index) => {
+                    const request = {
+                        location: point,
+                        radius: 2000, // 2km radius
+                        keyword: 'electric vehicle charging station EV charger',
+                        type: 'gas_station'
+                    };
+
+                    service.nearbySearch(request, (results, status) => {
+                        searchesCompleted++;
+                        
+                        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                            results.forEach(place => {
+                                // Avoid duplicates by checking if station already exists
+                                const isDuplicate = chargingStations.some(station => 
+                                    Math.abs(station.geometry.location.lat() - place.geometry.location.lat()) < 0.001 &&
+                                    Math.abs(station.geometry.location.lng() - place.geometry.location.lng()) < 0.001
+                                );
+
+                                if (!isDuplicate && stationCount < 20) { // Limit to 20 stations
+                                    chargingStations.push(place);
+                                    addChargingStationMarker(place);
+                                    stationCount++;
+                                }
+                            });
+                        }
+
+                        // Log progress
+                        if (searchesCompleted === totalSearches) {
+                            console.log(`✅ Found ${stationCount} charging stations along route`);
+                        }
+                    });
+
+                    // Add delay between requests to avoid rate limiting
+                    setTimeout(() => {}, index * 100);
+                });
+
+            } catch (error) {
+                console.log('⚠️ Error searching for charging stations:', error);
+            }
+        }
+
+        function addChargingStationMarker(place) {
+            const marker = new google.maps.Marker({
+                position: place.geometry.location,
+                map: map,
+                title: place.name,
+                icon: {
+                    url: 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%2300ff00"><rect x="3" y="3" width="18" height="18" rx="2" fill="%23ffffff" stroke="%2300ff00" stroke-width="2"/><path d="M8 8h8v8H8z" fill="%2300ff00"/><circle cx="12" cy="12" r="2" fill="%23ffffff"/><path d="M12 6v2M12 16v2M6 12h2M16 12h2" stroke="%2300ff00" stroke-width="2"/></svg>',
+                    scaledSize: new google.maps.Size(32, 32)
+                },
+                zIndex: 1000
+            });
+
+            // Create info window for charging station details
+            const infoWindow = new google.maps.InfoWindow({
+                content: `
+                    <div style="padding: 10px; max-width: 250px;">
+                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">
+                            ⚡ ${place.name}
+                        </h3>
+                        <div style="margin-bottom: 8px; color: #666; font-size: 14px;">
+                            📍 ${place.vicinity || 'Location not specified'}
+                        </div>
+                        <div style="margin-bottom: 8px; color: #666; font-size: 14px;">
+                            ⭐ Rating: ${place.rating ? place.rating.toFixed(1) : 'N/A'}
+                        </div>
+                        <div style="color: #666; font-size: 12px;">
+                            ${place.opening_hours?.open_now ? 
+                                '<span style="color: #00aa00;">🟢 Open Now</span>' : 
+                                place.opening_hours?.open_now === false ? 
+                                '<span style="color: #aa0000;">🔴 Closed</span>' : 
+                                '<span style="color: #888;">⚪ Hours Unknown</span>'
+                            }
+                        </div>
+                    </div>
+                `
+            });
+
+            marker.addListener('click', () => {
+                infoWindow.open(map, marker);
+            });
+
+            chargingMarkers.push(marker);
+        }
+
+        function clearChargingStations() {
+            // Clear existing markers
+            chargingMarkers.forEach(marker => {
+                marker.setMap(null);
+            });
+            chargingMarkers = [];
+            chargingStations = [];
+        }
         
         .container {
             max-width: 1200px;
@@ -171,6 +301,7 @@
             width: 100%; 
             border-radius: 15px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            background: #f0f0f0;
         }
         
         .map-container {
@@ -178,6 +309,41 @@
             padding: 20px;
             border-radius: 15px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .map-status {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border: 2px dashed #ddd;
+        }
+        
+        .map-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
         
         @media (max-width: 768px) {
@@ -194,7 +360,6 @@
             }
         }
     </style>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry&callback=initMap" async defer></script>
 </head>
 <body>
     <div class="container">
@@ -211,6 +376,9 @@
                     Optimize Route
                 </button>
             </div>
+            <div style="margin-top: 15px; text-align: center; color: #666; font-size: 14px;">
+                ⚡ Green markers show EV charging stations along your route
+            </div>
         </div>
         
         <div class="results" id="results">
@@ -220,7 +388,12 @@
         </div>
         
         <div class="map-container">
-            <div id="map"></div>
+            <div id="map">
+                <div class="map-loading">
+                    <div class="loading-spinner"></div>
+                    Loading Google Maps...
+                </div>
+            </div>
         </div>
     </div>
 
@@ -228,14 +401,22 @@
         let map;
         let directionsService;
         let directionsRenderer;
+        let mapInitialized = false;
+        let mapFailure = false;
+        let chargingStations = [];
+        let chargingMarkers = [];
 
         // Global error handler for Google Maps
         window.gm_authFailure = function() {
             console.error('❌ Google Maps authentication failed');
-            document.getElementById('map').innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Google Maps authentication failed. Route optimization will still work without map display.</div>';
+            mapFailure = true;
+            showMapError('Google Maps authentication failed. Please check your API key.');
         };
 
-        async function initMap() {
+        // Global callback for Google Maps API
+        window.initMap = function() {
+            console.log('🔄 Initializing Google Maps...');
+            
             try {
                 const berlin = { lat: 52.5200, lng: 13.4050 };
                 
@@ -281,11 +462,99 @@
                 });
                 directionsRenderer.setMap(map);
                 
+                mapInitialized = true;
                 console.log('✅ Google Maps initialized successfully');
+                
+                // Add a marker for Berlin center
+                new google.maps.Marker({
+                    position: berlin,
+                    map: map,
+                    title: 'Berlin Center',
+                    icon: {
+                        url: 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%23667eea"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
+                        scaledSize: new google.maps.Size(24, 24)
+                    }
+                });
                 
             } catch (error) {
                 console.error('❌ Google Maps initialization error:', error);
-                document.getElementById('map').innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Map could not be loaded. Route optimization will still work.</div>';
+                mapFailure = true;
+                showMapError('Failed to initialize Google Maps.');
+            }
+        };
+
+        function showMapError(message) {
+            document.getElementById('map').innerHTML = `
+                <div class="map-status">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🗺️</div>
+                    <div style="font-weight: bold; margin-bottom: 5px;">Map Unavailable</div>
+                    <div style="font-size: 14px;">${message}</div>
+                    <div style="font-size: 12px; margin-top: 10px; color: #888;">
+                        Route optimization will still work without map display.
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayRouteOnMap(origin, destination) {
+            if (!mapInitialized || mapFailure) {
+                console.log('⚠️ Map not available for route display');
+                return;
+            }
+
+            try {
+                const request = {
+                    origin: origin,
+                    destination: destination,
+                    travelMode: google.maps.TravelMode.DRIVING,
+                    unitSystem: google.maps.UnitSystem.METRIC,
+                    avoidHighways: false,
+                    avoidTolls: false
+                };
+
+                directionsService.route(request, (result, status) => {
+                    if (status === 'OK' && result) {
+                        directionsRenderer.setDirections(result);
+                        console.log('✅ Route displayed on map');
+                        
+                        // Find and display charging stations along the route
+                        findChargingStations(result.routes[0]);
+                        
+                        // Add custom markers for start and end points
+                        const route = result.routes[0];
+                        const leg = route.legs[0];
+                        
+                        // Start marker
+                        new google.maps.Marker({
+                            position: leg.start_location,
+                            map: map,
+                            title: 'Start: ' + leg.start_address,
+                            icon: {
+                                url: 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%2300ff00"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke="white" stroke-width="2" fill="none"/></svg>',
+                                scaledSize: new google.maps.Size(32, 32)
+                            }
+                        });
+                        
+                        // End marker
+                        new google.maps.Marker({
+                            position: leg.end_location,
+                            map: map,
+                            title: 'End: ' + leg.end_address,
+                            icon: {
+                                url: 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%23ff0000"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4" stroke="white" stroke-width="2" fill="none"/></svg>',
+                                scaledSize: new google.maps.Size(32, 32)
+                            }
+                        });
+                        
+                    } else {
+                        console.log('⚠️ Could not display route on map:', status);
+                        // Don't show error to user, just log it
+                    }
+                });
+                
+            } catch (error) {
+                console.log('⚠️ Map route display error:', error);
+                // Continue silently - backend prediction still works
             }
         }
 
@@ -306,30 +575,8 @@
             resultsDiv.innerHTML = '<div class="loading">🔄 Extracting real route data (speed limits, elevation, weather, traffic)...</div>';
 
             try {
-                // Show route on map first
-                const request = {
-                    origin: origin,
-                    destination: destination,
-                    travelMode: google.maps.TravelMode.DRIVING,
-                    unitSystem: google.maps.UnitSystem.METRIC,
-                    avoidHighways: false,
-                    avoidTolls: false
-                };
-
-                // Safely handle Google Maps directions
-                try {
-                    directionsService.route(request, (result, status) => {
-                        if (status === 'OK' && result) {
-                            directionsRenderer.setDirections(result);
-                            console.log('✅ Route displayed on map');
-                        } else {
-                            console.log('⚠️ Could not display route on map:', status);
-                        }
-                    });
-                } catch (mapError) {
-                    console.log('⚠️ Map display error:', mapError);
-                    // Continue with backend prediction even if map fails
-                }
+                // Display route on map (non-blocking)
+                displayRouteOnMap(origin, destination);
 
                 // Get energy prediction from backend
                 const response = await fetch('/predict', {
@@ -430,7 +677,23 @@
                     }
                 });
             });
+
+            // Load Google Maps API with proper error handling
+            setTimeout(() => {
+                if (!mapInitialized && !mapFailure) {
+                    console.log('⚠️ Google Maps taking longer than expected to load');
+                    if (!window.google) {
+                        showMapError('Google Maps API failed to load. Please check your internet connection.');
+                    }
+                }
+            }, 10000); // 10 second timeout
         });
+    </script>
+    
+    <!-- Load Google Maps API with callback -->
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXV2954AqlP_s3jGW_wn4lzA2wgffOFys&libraries=geometry,places&callback=initMap"
+        onerror="showMapError('Failed to load Google Maps API script.')">
     </script>
 </body>
 </html>
